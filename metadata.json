@@ -1,0 +1,6 @@
+{
+  "name": "StreakMap",
+  "description": "Contribution heat map widgets for LeetCode, Codeforces, GitHub, GeeksForGeeks, CodeChef, AtCoder, and Topcoder.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
