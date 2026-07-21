@@ -275,7 +275,7 @@ fun PlatformCard(
                             text = "${account.streak}d Streak",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
-                            color = platform.primaryColor
+                            color = if (account.streak > 0) Color(0xFFFFA116) else Color(0xFF24292E)
                         )
                         val solvedDisplay = if (account.totalProblems > 0) {
                             "${account.totalSolved}/${account.totalProblems}"
@@ -457,7 +457,7 @@ fun PlatformCard(
                             onClick = { onSave(username, selectedTheme) },
                             shape = RoundedCornerShape(12.dp),
                             enabled = !isLoading && username.isNotBlank(),
-                            colors = ButtonDefaults.buttonColors(containerColor = platform.primaryColor),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFA116)),
                             modifier = Modifier.weight(1.2f)
                         ) {
                             if (isLoading) {
