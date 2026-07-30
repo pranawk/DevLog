@@ -5,6 +5,12 @@
 # For more details, see
 #   http://developer.android.com/guide/developing/tools/proguard.html
 
+# Keep data models used for Room and potential JSON serialization
+-keep class com.matrix.devlog.data.** { *; }
+
+# Moshi and Retrofit rules are typically included in their AARs,
+# but keeping models is a safe measure.
+
 # If your project uses WebView with JS, uncomment the following
 # and specify the fully qualified class name to the JavaScript interface
 # class:
