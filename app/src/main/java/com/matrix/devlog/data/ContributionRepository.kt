@@ -90,13 +90,30 @@ class ContributionRepository(
             null
         }
 
-        val updatedMap = fetchedResult?.map ?: if (account.cachedDataJson == "{}" || account.cachedDataJson.isBlank()) {
-            generateDeterministicSeed(account.username)
-        } else {
-            null
-        }
+        if (fetchedResult != null) {
+            val updatedMap = fetchedResult.map
+            val total = updatedMap.values.sum()
+            val streak = calculateStreak(updatedMap)
+            
+            val json = JSONObject()
+            updatedMap.forEach { (date, count) ->
+                json.put(date, count)
+            }
 
-        if (updatedMap != null) {
+            val updatedAccount = account.copy(
+                cachedDataJson = json.toString(),
+                totalContributions = if (id == "github" || id == "codeforces" || id == "atcoder") fetchedResult.totalSolved else total,
+                totalSolved = fetchedResult.totalSolved,
+                totalProblems = if (fetchedResult.totalProblems > 0) fetchedResult.totalProblems else account.totalProblems,
+                streak = streak,
+                lastUpdated = System.currentTimeMillis()
+            )
+            dao.insertAccount(updatedAccount)
+            Log.d("ContributionRepo", "Saved $id: total=$total solved=${updatedAccount.totalSolved}")
+            triggerWidgetUpdate(id)
+            return@withContext true
+        } else if (account.cachedDataJson == "{}" || account.cachedDataJson.isBlank()) {
+            val updatedMap = generateDeterministicSeed(account.username)
             val total = updatedMap.values.sum()
             val streak = calculateStreak(updatedMap)
             
@@ -108,13 +125,10 @@ class ContributionRepository(
             val updatedAccount = account.copy(
                 cachedDataJson = json.toString(),
                 totalContributions = total,
-                totalSolved = if (fetchedResult != null) fetchedResult.totalSolved else account.totalSolved,
-                totalProblems = if (fetchedResult != null) fetchedResult.totalProblems else account.totalProblems,
                 streak = streak,
                 lastUpdated = System.currentTimeMillis()
             )
             dao.insertAccount(updatedAccount)
-            Log.d("ContributionRepo", "Saved $id: total=$total solved=${updatedAccount.totalSolved}")
             triggerWidgetUpdate(id)
             return@withContext true
         } else {
@@ -146,37 +160,52 @@ class ContributionRepository(
     }
 
     private fun fetchGithub(username: String): FetchResult? {
-        val url = "https://github-contributions-api.deno.dev/$username.json"
+        val url = "https://github-contributions-api.jogruber.de/v4/$username"
         Log.d("ContributionRepo", "Fetching GitHub data from: $url")
         val request = Request.Builder()
             .url(url)
             .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
             .build()
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return null
+            if (!response.isSuccessful) {
+                Log.e("ContributionRepo", "GitHub API failed: ${response.code} ${response.message}")
+                return null
+            }
             val body = response.body?.string() ?: return null
             val json = JSONObject(body)
-            val contributionsMatrix = json.optJSONArray("contributions") ?: return null
             
-            val map = mutableMapOf<String, Int>()
-            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-            val cutoff = System.currentTimeMillis() - (185L * 24 * 60 * 60 * 1000)
-
-            for (i in 0 until contributionsMatrix.length()) {
-                val weekArray = contributionsMatrix.optJSONArray(i) ?: continue
-                for (j in 0 until weekArray.length()) {
-                    val day = weekArray.optJSONObject(j) ?: continue
-                    val dateStr = day.optString("date") ?: continue
-                    val count = day.optInt("contributionCount", 0)
-                    try {
-                        val date = dateFormat.parse(dateStr)
-                        if (date != null && date.time >= cutoff) {
-                            map[dateStr] = count
-                        }
-                    } catch (e: Exception) {}
+            // 1. Calculate Overall Total
+            var overallTotal = 0
+            val totalsJson = json.optJSONObject("total")
+            if (totalsJson != null) {
+                val years = totalsJson.keys()
+                while (years.hasNext()) {
+                    overallTotal += totalsJson.optInt(years.next(), 0)
                 }
             }
-            return FetchResult(map, totalSolved = json.optInt("totalContributions", 0), totalProblems = 0)
+
+            // 2. Parse Daily Contributions for Heatmap
+            val contributions = json.optJSONArray("contributions") ?: return null
+            val map = mutableMapOf<String, Int>()
+            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            val now = System.currentTimeMillis()
+            val cutoff = now - (365L * 2 * 24 * 60 * 60 * 1000) // Keep 2 years in cache
+
+            for (i in 0 until contributions.length()) {
+                val day = contributions.optJSONObject(i) ?: continue
+                val dateStr = day.optString("date") ?: continue
+                val count = day.optInt("count", 0)
+                
+                try {
+                    val date = dateFormat.parse(dateStr)
+                    if (date != null && date.time >= cutoff) {
+                        map[dateStr] = count
+                    }
+                } catch (e: Exception) {}
+            }
+            
+            Log.d("ContributionRepo", "GitHub fetch complete: ${map.size} days in map, overallTotal: $overallTotal")
+            return FetchResult(map, totalSolved = overallTotal, totalProblems = 0)
         }
     }
 

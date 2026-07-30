@@ -101,7 +101,7 @@ object WidgetDrawingHelper {
         val monthGap = 12f * scale
         val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val now = Calendar.getInstance()
-        
+
         val monthsToShow = 6
         val monthsList = mutableListOf<Calendar>()
         for (i in (monthsToShow - 1) downTo 0) {
@@ -118,15 +118,15 @@ object WidgetDrawingHelper {
             val tempCal = Calendar.getInstance()
             tempCal.set(mCal.get(Calendar.YEAR), mCal.get(Calendar.MONTH), 1, 0, 0, 0)
             val firstDayOfWeek = tempCal.get(Calendar.DAY_OF_WEEK)
-            
+
             // Days in month up to today (if current month)
             val isCurrentMonth = mCal.get(Calendar.MONTH) == now.get(Calendar.MONTH) && mCal.get(Calendar.YEAR) == now.get(Calendar.YEAR)
             val maxDaysToConsider = if (isCurrentMonth) now.get(Calendar.DAY_OF_MONTH) else mCal.getActualMaximum(Calendar.DAY_OF_MONTH)
-            
+
             // Columns containing at least one day up to today
             val visibleColsInMonth = Math.ceil((firstDayOfWeek - 1 + maxDaysToConsider).toDouble() / 7).toInt()
             monthVisibleColCounts.add(visibleColsInMonth)
-            
+
             totalGridWidth += visibleColsInMonth * (squareSize + spacing) - spacing
             if (i < monthsList.size - 1) totalGridWidth += monthGap
         }
@@ -162,7 +162,7 @@ object WidgetDrawingHelper {
                 val dayOfWeek = tempCal.get(Calendar.DAY_OF_WEEK)
                 val colInMonth = (day + firstDayOfWeek - 2) / 7
                 val row = dayOfWeek - 1
-                
+
                 val x = currentX + colInMonth * (squareSize + spacing)
                 val y = gridStartY + row * (squareSize + spacing)
                 
