@@ -19,7 +19,6 @@ import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -43,17 +42,28 @@ fun PracticeScreen() {
     val accounts by db.contributionDao().getAllAccountsFlow().collectAsStateWithLifecycle(initialValue = emptyList())
     
     var selectedPlatform by remember { mutableStateOf("Codeforces") }
-    val platforms = listOf("Codeforces", "LeetCode", "AtCoder")
+    val platformOptions = listOf("Codeforces", "LeetCode", "AtCoder")
 
     LaunchedEffect(selectedPlatform) {
         repository.refreshAccountData(selectedPlatform.lowercase())
     }
 
-    val cfProblems = remember { PracticeProblemProvider.getProblems(context, "Codeforces") }
-    val categories = remember(cfProblems) { cfProblems.map { it.difficulty }.distinct() }
+    val problems = remember(selectedPlatform) { 
+        PracticeProblemProvider.getProblems(context, selectedPlatform) 
+    }
+    val categories = remember(problems) { 
+        problems.map { it.difficulty }.distinct() 
+    }
     
     val pagerState = rememberPagerState(pageCount = { categories.size })
     
+    // Reset pager when platform changes
+    LaunchedEffect(selectedPlatform) {
+        if (pagerState.pageCount > 0) {
+            pagerState.scrollToPage(0)
+        }
+    }
+
     Scaffold(
         topBar = {
             Column {
@@ -69,13 +79,13 @@ fun PracticeScreen() {
                 
                 // Platform Selector
                 ScrollableTabRow(
-                    selectedTabIndex = platforms.indexOf(selectedPlatform),
+                    selectedTabIndex = platformOptions.indexOf(selectedPlatform),
                     edgePadding = 0.dp,
                     containerColor = MaterialTheme.colorScheme.surface,
                     divider = {},
                     indicator = {}
                 ) {
-                    platforms.forEach { platform ->
+                    platformOptions.forEach { platform ->
                         val isSelected = selectedPlatform == platform
                         Tab(
                             selected = isSelected,
@@ -92,7 +102,7 @@ fun PracticeScreen() {
                     }
                 }
 
-                if (selectedPlatform == "Codeforces" && categories.isNotEmpty()) {
+                if (categories.isNotEmpty()) {
                     ScrollableTabRow(
                         selectedTabIndex = pagerState.currentPage,
                         edgePadding = 16.dp,
@@ -130,13 +140,15 @@ fun PracticeScreen() {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            if (selectedPlatform != "Codeforces") {
+            if (categories.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("More problems coming soon!", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            } else if (categories.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                    if (selectedPlatform == "AtCoder") {
+                        Text("Coming soon!", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else if (selectedPlatform == "LeetCode") {
+                        Text("Please save your LeetCode username first!", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        CircularProgressIndicator()
+                    }
                 }
             } else {
                 HorizontalPager(
@@ -144,12 +156,12 @@ fun PracticeScreen() {
                     modifier = Modifier.weight(1f)
                 ) { page ->
                     val category = categories[page]
-                    val problemsInCategory = cfProblems.filter { it.difficulty == category }
-                    val cfAccount = accounts.find { it.id == "codeforces" }
-                    val solvedIds = remember(cfAccount) {
+                    val problemsInCategory = problems.filter { it.difficulty == category }
+                    val account = accounts.find { it.id == selectedPlatform.lowercase() }
+                    val solvedIds = remember(account) {
                         val set = mutableSetOf<String>()
                         try {
-                            val arr = JSONArray(cfAccount?.solvedProblemsJson ?: "[]")
+                            val arr = JSONArray(account?.solvedProblemsJson ?: "[]")
                             for (i in 0 until arr.length()) {
                                 set.add(arr.getString(i))
                             }
@@ -168,7 +180,6 @@ fun PracticeScreen() {
                 }
             }
             
-            // Padding for floating bottom nav
             Spacer(modifier = Modifier.height(0.dp))
         }
     }
@@ -220,18 +231,20 @@ fun ProblemItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = RoundedCornerShape(4.dp),
-                        color = if (isSolved) Color(0xFFC8E6C9) else MaterialTheme.colorScheme.secondaryContainer,
-                        modifier = Modifier.padding(end = 8.dp)
-                    ) {
-                        Text(
-                            text = problem.id,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                            color = if (isSolved) Color(0xFF1B5E20) else MaterialTheme.colorScheme.onSecondaryContainer
-                        )
+                    if (problem.platform == "Codeforces") {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = if (isSolved) Color(0xFFC8E6C9) else MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Text(
+                                text = problem.id,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                                color = if (isSolved) Color(0xFF1B5E20) else MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
                     }
                     Text(
                         text = problem.name,

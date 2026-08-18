@@ -8,17 +8,25 @@ import java.util.Random
 
 object PracticeProblemProvider {
 
-    private var cachedProblems: List<PracticeProblem>? = null
+    private var cachedCfProblems: List<PracticeProblem>? = null
+    private var cachedLcProblems: List<PracticeProblem>? = null
+    
     private val allTopics = listOf("Math", "DP", "Greedy", "Graphs", "Strings", "Implementation", "Data Structures", "Number Theory", "DFS/BFS", "Sorting")
 
     fun getProblems(context: Context, platform: String): List<PracticeProblem> {
-        if (cachedProblems != null) return cachedProblems!!
+        return when (platform) {
+            "Codeforces" -> getCfProblems(context)
+            "LeetCode" -> getLcProblems(context)
+            else -> emptyList()
+        }
+    }
+
+    private fun getCfProblems(context: Context): List<PracticeProblem> {
+        if (cachedCfProblems != null) return cachedCfProblems!!
         
         val problems = mutableListOf<PracticeProblem>()
         try {
-            // Load real tags from cached JSON
             val cfTagsMap = loadRealTags(context)
-            
             val assetManager = context.assets
             val files = assetManager.list("problems/codeforces") ?: emptyArray()
             
@@ -36,17 +44,16 @@ object PracticeProblemProvider {
                     else -> fileName.replace(".html", "").replace("_", "-")
                 }
                 
-                val ratingValue = extractRating(fileName)
+                val ratingValue = extractCfRating(fileName)
                 
-                for (i in 1 until rows.size) { // skip header
+                for (i in 1 until rows.size) {
                     val cols = rows[i].select("td")
                     if (cols.size >= 4) {
                         val nameElement = cols[1].select("a").first()
                         val name = nameElement?.text() ?: ""
                         val link = nameElement?.attr("href") ?: ""
-                        val id = extractId(link)
+                        val id = extractCfId(link)
                         
-                        // Use real tags if available, else deterministic mock ones
                         var topics = cfTagsMap[id]
                         if (topics == null || topics.isEmpty()) {
                             val random = Random(id.hashCode().toLong())
@@ -71,18 +78,77 @@ object PracticeProblemProvider {
                 }
             }
         } catch (e: Exception) {
-            Log.e("PracticeProblemProvider", "Error parsing problems", e)
+            Log.e("PracticeProblemProvider", "Error parsing CF problems", e)
         }
         
-        // Sorting by rating ensures < 1300 (rating 0) comes first
-        cachedProblems = problems.sortedBy { it.rating }
-        return cachedProblems!!
+        cachedCfProblems = problems.sortedBy { it.rating }
+        return cachedCfProblems!!
+    }
+
+    private fun getLcProblems(context: Context): List<PracticeProblem> {
+        if (cachedLcProblems != null) return cachedLcProblems!!
+        
+        val problems = mutableListOf<PracticeProblem>()
+        try {
+            val assetManager = context.assets
+            val inputStream = assetManager.open("problems/leetcode/leetcode_450.md")
+            val content = inputStream.bufferedReader().use { it.readText() }
+            
+            val lines = content.lines()
+            var currentDifficulty = "Easy"
+            
+            for (line in lines) {
+                val trimmed = line.trim()
+                if (trimmed.contains("##") && trimmed.contains("Easy")) currentDifficulty = "Easy"
+                else if (trimmed.contains("##") && trimmed.contains("Medium")) currentDifficulty = "Medium"
+                else if (trimmed.contains("##") && trimmed.contains("Hard")) currentDifficulty = "Hard"
+                
+                if (trimmed.startsWith("|") && !trimmed.contains("Problem Title") && !trimmed.contains("# |") && !trimmed.contains("|:---") && !trimmed.contains("|---|")) {
+                    val parts = trimmed.split("|").map { it.trim() }.filter { it.isNotEmpty() }
+                    if (parts.size >= 4) {
+                        val name = parts[1]
+                        val tagsStr = parts[2]
+                        val linkPart = parts[3]
+                        
+                        val linkRegex = """\[.*\]\((.*)\)""".toRegex()
+                        val linkMatch = linkRegex.find(linkPart)
+                        val link = linkMatch?.groupValues?.get(1) ?: ""
+                        val slug = extractLcSlug(link)
+                        
+                        if (name.isNotEmpty() && slug.isNotEmpty()) {
+                            val tags = tagsStr.split("&", ",").map { it.trim() }.filter { it.isNotEmpty() }
+                            
+                            problems.add(PracticeProblem(
+                                id = slug,
+                                name = name,
+                                link = link,
+                                platform = "LeetCode",
+                                difficulty = currentDifficulty,
+                                rating = when(currentDifficulty) {
+                                    "Easy" -> 1
+                                    "Medium" -> 2
+                                    "Hard" -> 3
+                                    else -> 0
+                                },
+                                topics = tags
+                            ))
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("PracticeProblemProvider", "Error parsing LC problems", e)
+        }
+        
+        cachedLcProblems = problems
+        return cachedLcProblems!!
     }
 
     private fun loadRealTags(context: Context): Map<String, List<String>> {
         val map = mutableMapOf<String, List<String>>()
         try {
-            val jsonStr = context.assets.open("problems/codeforces_all.json").bufferedReader().use { it.readText() }
+            val inputStream = context.assets.open("problems/codeforces_all.json")
+            val jsonStr = inputStream.bufferedReader().use { it.readText() }
             val root = JSONObject(jsonStr)
             val result = root.optJSONObject("result")
             val problems = result?.optJSONArray("problems")
@@ -102,14 +168,11 @@ object PracticeProblemProvider {
                     }
                 }
             }
-        } catch (e: Exception) {
-            Log.e("PracticeProblemProvider", "Error loading real tags", e)
-        }
+        } catch (e: Exception) {}
         return map
     }
 
-    private fun extractId(link: String): String {
-        // http://codeforces.com/problemset/problem/144/A -> 144A
+    private fun extractCfId(link: String): String {
         val parts = link.trimEnd('/').split("/")
         if (parts.size >= 2) {
             val index = parts.last()
@@ -119,7 +182,12 @@ object PracticeProblemProvider {
         return link
     }
 
-    private fun extractRating(fileName: String): Int {
+    private fun extractLcSlug(link: String): String {
+        // https://leetcode.com/problems/two-sum/ -> two-sum
+        return link.trimEnd('/').split("/").last()
+    }
+
+    private fun extractCfRating(fileName: String): Int {
         return when {
             fileName.contains("lt_1300") -> 0
             fileName.contains("gt_2200") -> 2200
@@ -127,7 +195,7 @@ object PracticeProblemProvider {
                 try {
                     fileName.split("_").first().filter { it.isDigit() }.toInt()
                 } catch (e: Exception) {
-                    10000 // default high
+                    10000
                 }
             }
         }

@@ -216,11 +216,50 @@ class ContributionRepository(
     }
 
     private fun fetchLeetcode(username: String): FetchResult? {
+        // 1. Get stats to find totalSolved
+        val statsUrl = "https://alfa-leetcode-api.onrender.com/$username/solved"
+        val statsRequest = Request.Builder().url(statsUrl).header("User-Agent", "Mozilla/5.0").build()
+        val totalSolved = try {
+            client.newCall(statsRequest).execute().use { response ->
+                if (response.isSuccessful) {
+                    val json = JSONObject(response.body?.string() ?: "{}")
+                    json.optInt("solvedProblem", 0)
+                } else 0
+            }
+        } catch (e: Exception) { 0 }
+
+        // 2. Fetch all accepted submissions using the limit
+        val solvedProblemIds = mutableSetOf<String>()
+        if (totalSolved > 0) {
+            val acUrl = "https://alfa-leetcode-api.onrender.com/$username/acSubmission?limit=$totalSolved"
+            val acRequest = Request.Builder().url(acUrl).header("User-Agent", "Mozilla/5.0").build()
+            try {
+                client.newCall(acRequest).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val bodyStr = response.body?.string() ?: "{}"
+                        val json = JSONObject(bodyStr)
+                        // The API returns an array named "submission" (based on your implementation)
+                        // Let's also check for top-level array if it's not wrapped
+                        val submissionArray = json.optJSONArray("submission") ?: JSONArray(bodyStr)
+                        for (i in 0 until submissionArray.length()) {
+                            val sub = submissionArray.optJSONObject(i) ?: continue
+                            val titleSlug = sub.optString("titleSlug")
+                            if (titleSlug.isNotEmpty()) {
+                                solvedProblemIds.add(titleSlug)
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("ContributionRepo", "Error fetching LC AC submissions", e)
+            }
+        }
+
+        // 3. Fetch calendar for heatmap (using GraphQL as it's more standard for this)
         val query = """
             query userProfileCalendar(${'$'}username: String!) {
               matchedUser(username: ${'$'}username) {
                 userCalendar { submissionCalendar }
-                submitStats { acSubmissionNum { difficulty count } }
               }
               allQuestionsCount { difficulty count }
             }
@@ -235,37 +274,38 @@ class ContributionRepository(
             .header("Referer", "https://leetcode.com/$username")
             .header("User-Agent", "Mozilla/5.0")
             .build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return null
-            val json = JSONObject(response.body?.string() ?: return null)
-            val data = json.optJSONObject("data") ?: return null
-            val matchedUser = data.optJSONObject("matchedUser") ?: return null
-            
-            var totalSolved = 0
-            matchedUser.optJSONObject("submitStats")?.optJSONArray("acSubmissionNum")?.let { arr ->
-                for (i in 0 until arr.length()) {
-                    val item = arr.optJSONObject(i)
-                    if (item?.optString("difficulty") == "All") totalSolved = item.optInt("count", 0)
+        
+        try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return null
+                val bodyStr = response.body?.string() ?: return null
+                val json = JSONObject(bodyStr)
+                val data = json.optJSONObject("data") ?: return null
+                val matchedUser = data.optJSONObject("matchedUser") ?: return null
+                
+                var totalProblems = 0
+                data.optJSONArray("allQuestionsCount")?.let { arr ->
+                    for (i in 0 until arr.length()) {
+                        val item = arr.optJSONObject(i)
+                        if (item?.optString("difficulty") == "All") totalProblems = item.optInt("count", 0)
+                    }
                 }
-            }
-            var totalProblems = 0
-            data.optJSONArray("allQuestionsCount")?.let { arr ->
-                for (i in 0 until arr.length()) {
-                    val item = arr.optJSONObject(i)
-                    if (item?.optString("difficulty") == "All") totalProblems = item.optInt("count", 0)
+
+                val calendarJson = JSONObject(matchedUser.optJSONObject("userCalendar")?.optString("submissionCalendar", "{}") ?: "{}")
+                val map = mutableMapOf<String, Int>()
+                val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+                val cutoff = (System.currentTimeMillis() / 1000) - (365L * 24 * 60 * 60)
+                val keys = calendarJson.keys()
+                while (keys.hasNext()) {
+                    val tsStr = keys.next()
+                    val ts = tsStr.toLongOrNull() ?: continue
+                    if (ts >= cutoff) map[dateFormat.format(Date(ts * 1000))] = calendarJson.optInt(tsStr, 0)
                 }
+                return FetchResult(map, totalSolved, totalProblems, solvedProblemIds = solvedProblemIds)
             }
-            val calendarJson = JSONObject(matchedUser.optJSONObject("userCalendar")?.optString("submissionCalendar", "{}") ?: "{}")
-            val map = mutableMapOf<String, Int>()
-            val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
-            val cutoff = (System.currentTimeMillis() / 1000) - (185L * 24 * 60 * 60)
-            val keys = calendarJson.keys()
-            while (keys.hasNext()) {
-                val tsStr = keys.next()
-                val ts = tsStr.toLongOrNull() ?: continue
-                if (ts >= cutoff) map[dateFormat.format(Date(ts * 1000))] = calendarJson.optInt(tsStr, 0)
-            }
-            return FetchResult(map, totalSolved, totalProblems, solvedProblemIds = emptySet()) // LeetCode IDs logic can be added if needed
+        } catch (e: Exception) {
+            Log.e("ContributionRepo", "Error fetching LC GraphQL data", e)
+            return null
         }
     }
 
