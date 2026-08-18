@@ -232,20 +232,25 @@ class ContributionRepository(
         val solvedProblemIds = mutableSetOf<String>()
         if (totalSolved > 0) {
             val acUrl = "https://alfa-leetcode-api.onrender.com/$username/acSubmission?limit=$totalSolved"
+            Log.d("ContributionRepo", "Fetching LC AC submissions with limit $totalSolved: $acUrl")
             val acRequest = Request.Builder().url(acUrl).header("User-Agent", "Mozilla/5.0").build()
             try {
                 client.newCall(acRequest).execute().use { response ->
                     if (response.isSuccessful) {
                         val bodyStr = response.body?.string() ?: "{}"
-                        val json = JSONObject(bodyStr)
-                        // The API returns an array named "submission" (based on your implementation)
-                        // Let's also check for top-level array if it's not wrapped
-                        val submissionArray = json.optJSONArray("submission") ?: JSONArray(bodyStr)
-                        for (i in 0 until submissionArray.length()) {
-                            val sub = submissionArray.optJSONObject(i) ?: continue
-                            val titleSlug = sub.optString("titleSlug")
-                            if (titleSlug.isNotEmpty()) {
-                                solvedProblemIds.add(titleSlug)
+                        val submissions: JSONArray? = when {
+                            bodyStr.trim().startsWith("[") -> JSONArray(bodyStr)
+                            else -> {
+                                val json = JSONObject(bodyStr)
+                                json.optJSONArray("submission") ?: json.optJSONArray("acSubmission") ?: json.optJSONArray("recentAcSubmissionList")
+                            }
+                        }
+
+                        if (submissions != null) {
+                            for (i in 0 until submissions.length()) {
+                                val sub = submissions.optJSONObject(i) ?: continue
+                                val titleSlug = sub.optString("titleSlug") ?: sub.optString("title_slug")
+                                if (titleSlug.isNotEmpty()) solvedProblemIds.add(titleSlug)
                             }
                         }
                     }
@@ -255,7 +260,7 @@ class ContributionRepository(
             }
         }
 
-        // 3. Fetch calendar for heatmap (using GraphQL as it's more standard for this)
+        // 3. Fetch calendar for heatmap (GraphQL)
         val query = """
             query userProfileCalendar(${'$'}username: String!) {
               matchedUser(username: ${'$'}username) {
@@ -301,6 +306,7 @@ class ContributionRepository(
                     val ts = tsStr.toLongOrNull() ?: continue
                     if (ts >= cutoff) map[dateFormat.format(Date(ts * 1000))] = calendarJson.optInt(tsStr, 0)
                 }
+                Log.d("ContributionRepo", "LeetCode fetch complete: totalSolved=$totalSolved, solvedProblemIds=${solvedProblemIds.size}")
                 return FetchResult(map, totalSolved, totalProblems, solvedProblemIds = solvedProblemIds)
             }
         } catch (e: Exception) {
