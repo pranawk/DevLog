@@ -25,6 +25,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".practice.PracticeActivity"
+            android:exported="false"
+            android:label="Practice Problems"
+            android:theme="@style/Theme.MyApplication" />
+
         <!-- Receiver for App Updates and Device Reboots -->
         <receiver android:name=".receiver.AppUpdateReceiver"
             android:exported="true">

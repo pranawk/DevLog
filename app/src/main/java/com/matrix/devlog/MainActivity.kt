@@ -2,6 +2,7 @@ package com.matrix.devlog
 
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
@@ -22,6 +23,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -40,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.matrix.devlog.data.PlatformAccount
+import com.matrix.devlog.practice.PracticeScreen
 import com.matrix.devlog.ui.ContributionViewModel
 import com.matrix.devlog.ui.theme.MyApplicationTheme
 import com.matrix.devlog.widget.WidgetDrawingHelper
@@ -59,13 +63,123 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MyApplicationTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    MainScreen(viewModel = viewModel)
-                }
+                MainContainer(viewModel = viewModel)
             }
+        }
+    }
+}
+
+enum class ScreenTab {
+    HOME, PRACTICE
+}
+
+@Composable
+fun MainContainer(viewModel: ContributionViewModel) {
+    var currentTab by remember { mutableStateOf(ScreenTab.HOME) }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        bottomBar = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp, start = 24.dp, end = 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                FloatingBottomNavigation(
+                    currentTab = currentTab,
+                    onTabSelected = { currentTab = it }
+                )
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0) // Disable default insets handling for content to avoid double padding
+    ) { innerPadding ->
+        // We handle top for the status bar if needed.
+        Box(modifier = Modifier.fillMaxSize().padding(top = innerPadding.calculateTopPadding())) {
+            when (currentTab) {
+                ScreenTab.HOME -> DashboardScreen(viewModel = viewModel)
+                ScreenTab.PRACTICE -> PracticeScreen()
+            }
+        }
+    }
+}
+
+@Composable
+fun FloatingBottomNavigation(
+    currentTab: ScreenTab,
+    onTabSelected: (ScreenTab) -> Unit
+) {
+    // Floating Design
+    Surface(
+        modifier = Modifier
+            .widthIn(max = 400.dp)
+            .fillMaxWidth()
+            .height(68.dp),
+        shape = RoundedCornerShape(34.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+        tonalElevation = 8.dp,
+        shadowElevation = 12.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            NavigationItem(
+                icon = Icons.Default.Dashboard,
+                label = "Home",
+                isSelected = currentTab == ScreenTab.HOME,
+                onClick = { onTabSelected(ScreenTab.HOME) }
+            )
+            NavigationItem(
+                icon = Icons.Default.School,
+                label = "Practice",
+                isSelected = currentTab == ScreenTab.PRACTICE,
+                onClick = { onTabSelected(ScreenTab.PRACTICE) }
+            )
+        }
+    }
+}
+
+@Composable
+fun RowScope.NavigationItem(
+    icon: ImageVector,
+    label: String,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    val contentColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+    
+    Box(
+        modifier = Modifier
+            .weight(1f)
+            .fillMaxHeight()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = contentColor,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                color = contentColor
+            )
         }
     }
 }
@@ -74,7 +188,7 @@ data class PlatformInfo(
     val id: String,
     val name: String,
     val primaryColor: Color,
-    val iconResId: Int, // Changed from ImageVector to Resource ID
+    val iconResId: Int,
     val usernamePlaceholder: String
 )
 
@@ -104,7 +218,7 @@ val colorThemeOptions = listOf(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MainScreen(viewModel: ContributionViewModel) {
+fun DashboardScreen(viewModel: ContributionViewModel) {
     val context = LocalContext.current
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
     val loadingStates by viewModel.loadingStates.collectAsStateWithLifecycle()
@@ -193,6 +307,10 @@ fun MainScreen(viewModel: ContributionViewModel) {
                     }
                 )
             }
+            
+            item {
+                Spacer(modifier = Modifier.height(80.dp))
+            }
         }
     }
 }
@@ -238,9 +356,9 @@ fun PlatformCard(
                         .background(platform.primaryColor.copy(alpha = 0.15f))
                 ) {
                     Icon(
-                        painter = painterResource(id = platform.iconResId), // Use image resource
+                        painter = painterResource(id = platform.iconResId),
                         contentDescription = platform.name,
-                        tint = Color.Unspecified, // Show original colors
+                        tint = Color.Unspecified,
                         modifier = Modifier.size(22.dp)
                     )
                 }
