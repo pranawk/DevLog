@@ -36,7 +36,8 @@ class ContributionRepository(
     data class FetchResult(
         val map: Map<String, Int>,
         val totalSolved: Int = 0,
-        val totalProblems: Int = 0
+        val totalProblems: Int = 0,
+        val solvedProblemIds: Set<String> = emptySet()
     )
 
     suspend fun getAccount(id: String): PlatformAccount? = withContext(Dispatchers.IO) {
@@ -100,8 +101,12 @@ class ContributionRepository(
                 json.put(date, count)
             }
 
+            val solvedProblemsArray = JSONArray()
+            fetchedResult.solvedProblemIds.forEach { solvedProblemsArray.put(it) }
+
             val updatedAccount = account.copy(
                 cachedDataJson = json.toString(),
+                solvedProblemsJson = solvedProblemsArray.toString(),
                 totalContributions = if (id == "github" || id == "codeforces" || id == "atcoder") fetchedResult.totalSolved else total,
                 totalSolved = fetchedResult.totalSolved,
                 totalProblems = if (fetchedResult.totalProblems > 0) fetchedResult.totalProblems else account.totalProblems,
@@ -124,6 +129,7 @@ class ContributionRepository(
 
             val updatedAccount = account.copy(
                 cachedDataJson = json.toString(),
+                solvedProblemsJson = "[]",
                 totalContributions = total,
                 streak = streak,
                 lastUpdated = System.currentTimeMillis()
@@ -205,7 +211,7 @@ class ContributionRepository(
             }
             
             Log.d("ContributionRepo", "GitHub fetch complete: ${map.size} days in map, overallTotal: $overallTotal")
-            return FetchResult(map, totalSolved = overallTotal, totalProblems = 0)
+            return FetchResult(map, totalSolved = overallTotal, totalProblems = 0, solvedProblemIds = emptySet())
         }
     }
 
@@ -259,7 +265,7 @@ class ContributionRepository(
                 val ts = tsStr.toLongOrNull() ?: continue
                 if (ts >= cutoff) map[dateFormat.format(Date(ts * 1000))] = calendarJson.optInt(tsStr, 0)
             }
-            return FetchResult(map, totalSolved, totalProblems)
+            return FetchResult(map, totalSolved, totalProblems, solvedProblemIds = emptySet()) // LeetCode IDs logic can be added if needed
         }
     }
 
@@ -279,7 +285,11 @@ class ContributionRepository(
                 val item = result.optJSONObject(i) ?: continue
                 if (item.optString("verdict") == "OK") {
                     val problem = item.optJSONObject("problem")
-                    solvedProblemIds.add("${problem?.optInt("contestId")}${problem?.optString("index")}")
+                    val contestId = problem?.optInt("contestId")
+                    val index = problem?.optString("index")
+                    if (contestId != null && index != null) {
+                        solvedProblemIds.add("$contestId$index")
+                    }
                     val creationTime = item.optLong("creationTimeSeconds", 0)
                     if (creationTime >= cutoff) {
                         val dateStr = dateFormat.format(Date(creationTime * 1000))
@@ -287,7 +297,7 @@ class ContributionRepository(
                     }
                 }
             }
-            return FetchResult(map, totalSolved = solvedProblemIds.size, totalProblems = 9500)
+            return FetchResult(map, totalSolved = solvedProblemIds.size, totalProblems = 9500, solvedProblemIds = solvedProblemIds)
         }
     }
 
@@ -312,7 +322,7 @@ class ContributionRepository(
                     }
                 }
             }
-            return FetchResult(map, totalSolved = solvedProblemIds.size, totalProblems = 4000)
+            return FetchResult(map, totalSolved = solvedProblemIds.size, totalProblems = 4000, solvedProblemIds = solvedProblemIds)
         }
     }
 

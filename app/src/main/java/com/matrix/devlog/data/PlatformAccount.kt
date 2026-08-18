@@ -9,6 +9,7 @@ data class PlatformAccount(
     val username: String,
     val colorTheme: String, // "GREEN", "BLUE", "RED", "ORANGE", "PURPLE"
     val cachedDataJson: String, // Map of "YYYY-MM-DD" to Int (count)
+    val solvedProblemsJson: String = "[]", // List of solved problem IDs/links
     val totalContributions: Int = 0,
     val totalSolved: Int = 0,
     val totalProblems: Int = 0,
