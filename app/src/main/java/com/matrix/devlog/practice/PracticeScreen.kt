@@ -42,7 +42,7 @@ fun PracticeScreen() {
     val accounts by db.contributionDao().getAllAccountsFlow().collectAsStateWithLifecycle(initialValue = emptyList())
     
     var selectedPlatform by remember { mutableStateOf("Codeforces") }
-    val platformOptions = listOf("Codeforces", "LeetCode", "AtCoder")
+    val platformOptions = listOf("Codeforces", "LeetCode")
 
     LaunchedEffect(selectedPlatform) {
         repository.refreshAccountData(selectedPlatform.lowercase())
@@ -78,9 +78,8 @@ fun PracticeScreen() {
                 )
                 
                 // Platform Selector
-                ScrollableTabRow(
+                TabRow(
                     selectedTabIndex = platformOptions.indexOf(selectedPlatform),
-                    edgePadding = 0.dp,
                     containerColor = MaterialTheme.colorScheme.surface,
                     divider = {},
                     indicator = {}
@@ -103,32 +102,62 @@ fun PracticeScreen() {
                 }
 
                 if (categories.isNotEmpty()) {
-                    ScrollableTabRow(
-                        selectedTabIndex = pagerState.currentPage,
-                        edgePadding = 16.dp,
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                        divider = {},
-                        indicator = { tabPositions ->
-                            if (pagerState.currentPage < tabPositions.size) {
-                                TabRowDefaults.SecondaryIndicator(
-                                    Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
-                                    color = MaterialTheme.colorScheme.primary
+                    if (selectedPlatform == "LeetCode") {
+                        TabRow(
+                            selectedTabIndex = pagerState.currentPage,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            divider = {},
+                            indicator = { tabPositions ->
+                                if (pagerState.currentPage < tabPositions.size) {
+                                    TabRowDefaults.SecondaryIndicator(
+                                        Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        ) {
+                            categories.forEachIndexed { index, title ->
+                                Tab(
+                                    selected = pagerState.currentPage == index,
+                                    onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                                    text = { 
+                                        Text(
+                                            text = title,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (pagerState.currentPage == index) FontWeight.Bold else FontWeight.Normal
+                                        ) 
+                                    }
                                 )
                             }
                         }
-                    ) {
-                        categories.forEachIndexed { index, title ->
-                            Tab(
-                                selected = pagerState.currentPage == index,
-                                onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
-                                text = { 
-                                    Text(
-                                        text = title,
-                                        fontSize = 12.sp,
-                                        fontWeight = if (pagerState.currentPage == index) FontWeight.Bold else FontWeight.Normal
-                                    ) 
+                    } else {
+                        ScrollableTabRow(
+                            selectedTabIndex = pagerState.currentPage,
+                            edgePadding = 16.dp,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                            divider = {},
+                            indicator = { tabPositions ->
+                                if (pagerState.currentPage < tabPositions.size) {
+                                    TabRowDefaults.SecondaryIndicator(
+                                        Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
-                            )
+                            }
+                        ) {
+                            categories.forEachIndexed { index, title ->
+                                Tab(
+                                    selected = pagerState.currentPage == index,
+                                    onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                                    text = { 
+                                        Text(
+                                            text = title,
+                                            fontSize = 12.sp,
+                                            fontWeight = if (pagerState.currentPage == index) FontWeight.Bold else FontWeight.Normal
+                                        ) 
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -231,20 +260,18 @@ fun ProblemItem(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (problem.platform == "Codeforces") {
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = if (isSolved) Color(0xFFC8E6C9) else MaterialTheme.colorScheme.secondaryContainer,
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            Text(
-                                text = problem.id,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-                                color = if (isSolved) Color(0xFF1B5E20) else MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                        }
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = if (isSolved) Color(0xFFC8E6C9) else MaterialTheme.colorScheme.secondaryContainer,
+                        modifier = Modifier.padding(end = 8.dp)
+                    ) {
+                        Text(
+                            text = problem.displayId,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                            color = if (isSolved) Color(0xFF1B5E20) else MaterialTheme.colorScheme.onSecondaryContainer
+                        )
                     }
                     Text(
                         text = problem.name,

@@ -67,6 +67,7 @@ object PracticeProblemProvider {
                         
                         problems.add(PracticeProblem(
                             id = id,
+                            displayId = id,
                             name = name,
                             link = link,
                             platform = "Codeforces",
@@ -99,40 +100,51 @@ object PracticeProblemProvider {
             
             for (line in lines) {
                 val trimmed = line.trim()
-                if (trimmed.contains("##") && trimmed.contains("Easy")) currentDifficulty = "Easy"
-                else if (trimmed.contains("##") && trimmed.contains("Medium")) currentDifficulty = "Medium"
-                else if (trimmed.contains("##") && trimmed.contains("Hard")) currentDifficulty = "Hard"
                 
-                if (trimmed.startsWith("|") && !trimmed.contains("Problem Title") && !trimmed.contains("# |") && !trimmed.contains("|:---") && !trimmed.contains("|---|")) {
-                    val parts = trimmed.split("|").map { it.trim() }.filter { it.isNotEmpty() }
-                    if (parts.size >= 4) {
-                        val name = parts[1]
-                        val tagsStr = parts[2]
-                        val linkPart = parts[3]
+                if (trimmed.startsWith("##")) {
+                    val headerText = trimmed.lowercase()
+                    if (headerText.contains("easy")) currentDifficulty = "Easy"
+                    else if (headerText.contains("medium")) currentDifficulty = "Medium"
+                    else if (headerText.contains("hard")) currentDifficulty = "Hard"
+                    continue
+                }
+                
+                if (trimmed.startsWith("|")) {
+                    val parts = trimmed.split("|").map { it.trim() }.filter { it.isNotBlank() }
+                    
+                    if (parts.size < 4) continue
+                    if (parts[0].contains("#")) continue
+                    if (parts[0].contains("---")) continue
+                    if (parts[1].contains("Problem Title")) continue
+                    
+                    val problemNum = parts[0]
+                    val name = parts[1]
+                    val tagsStr = parts[2]
+                    val linkPart = parts[3]
+                    
+                    val linkRegex = """\[.*\]\((.*)\)""".toRegex()
+                    val linkMatch = linkRegex.find(linkPart)
+                    val link = linkMatch?.groupValues?.get(1) ?: ""
+                    val slug = extractLcSlug(link)
+                    
+                    if (name.isNotEmpty() && slug.isNotEmpty()) {
+                        val tags = tagsStr.split("&", ",").map { it.trim() }.filter { it.isNotEmpty() }
                         
-                        val linkRegex = """\[.*\]\((.*)\)""".toRegex()
-                        val linkMatch = linkRegex.find(linkPart)
-                        val link = linkMatch?.groupValues?.get(1) ?: ""
-                        val slug = extractLcSlug(link)
-                        
-                        if (name.isNotEmpty() && slug.isNotEmpty()) {
-                            val tags = tagsStr.split("&", ",").map { it.trim() }.filter { it.isNotEmpty() }
-                            
-                            problems.add(PracticeProblem(
-                                id = slug,
-                                name = name,
-                                link = link,
-                                platform = "LeetCode",
-                                difficulty = currentDifficulty,
-                                rating = when(currentDifficulty) {
-                                    "Easy" -> 1
-                                    "Medium" -> 2
-                                    "Hard" -> 3
-                                    else -> 0
-                                },
-                                topics = tags
-                            ))
-                        }
+                        problems.add(PracticeProblem(
+                            id = slug,
+                            displayId = problemNum,
+                            name = name,
+                            link = link,
+                            platform = "LeetCode",
+                            difficulty = currentDifficulty,
+                            rating = when(currentDifficulty) {
+                                "Easy" -> 1
+                                "Medium" -> 2
+                                "Hard" -> 3
+                                else -> 0
+                            },
+                            topics = tags
+                        ))
                     }
                 }
             }
@@ -183,7 +195,6 @@ object PracticeProblemProvider {
     }
 
     private fun extractLcSlug(link: String): String {
-        // https://leetcode.com/problems/two-sum/ -> two-sum
         return link.trimEnd('/').split("/").last()
     }
 
