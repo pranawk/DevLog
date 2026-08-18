@@ -45,6 +45,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.matrix.devlog.data.PlatformAccount
 import com.matrix.devlog.practice.PracticeScreen
 import com.matrix.devlog.ui.ContributionViewModel
+import com.matrix.devlog.ui.StatsScreen
 import com.matrix.devlog.ui.theme.MyApplicationTheme
 import com.matrix.devlog.widget.WidgetDrawingHelper
 import com.matrix.devlog.worker.DataRefreshWorker
@@ -70,7 +71,7 @@ class MainActivity : ComponentActivity() {
 }
 
 enum class ScreenTab {
-    HOME, PRACTICE
+    HOME, PRACTICE, STATS
 }
 
 @Composable
@@ -100,6 +101,7 @@ fun MainContainer(viewModel: ContributionViewModel) {
             when (currentTab) {
                 ScreenTab.HOME -> DashboardScreen(viewModel = viewModel)
                 ScreenTab.PRACTICE -> PracticeScreen()
+                ScreenTab.STATS -> StatsScreen(viewModel = viewModel)
             }
         }
     }
@@ -138,6 +140,12 @@ fun FloatingBottomNavigation(
                 label = "Practice",
                 isSelected = currentTab == ScreenTab.PRACTICE,
                 onClick = { onTabSelected(ScreenTab.PRACTICE) }
+            )
+            NavigationItem(
+                icon = Icons.Default.PieChart,
+                label = "Stats",
+                isSelected = currentTab == ScreenTab.STATS,
+                onClick = { onTabSelected(ScreenTab.STATS) }
             )
         }
     }

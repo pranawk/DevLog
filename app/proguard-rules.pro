@@ -8,6 +8,20 @@
 # Keep data models used for Room and potential JSON serialization
 -keep class com.matrix.devlog.data.** { *; }
 
+# Optimization settings
+-optimizationpasses 5
+-allowaccessmodification
+-mergeinterfacesaggressively
+
+# Remove Log calls in optimized builds
+-assumenosideeffects class android.util.Log {
+    public static *** d(...);
+    public static *** v(...);
+    public static *** i(...);
+    public static *** w(...);
+    public static *** e(...);
+}
+
 # Moshi and Retrofit rules are typically included in their AARs,
 # but keeping models is a safe measure.
 

@@ -187,7 +187,9 @@ fun PracticeScreen() {
                     val category = categories[page]
                     val problemsInCategory = problems.filter { it.difficulty == category }
                     val account = accounts.find { it.id == selectedPlatform.lowercase() }
-                    val solvedIds = remember(account) {
+                    val solvedIds = remember(account, selectedPlatform) {
+                        if (selectedPlatform != "Codeforces") return@remember emptySet<String>()
+
                         val set = mutableSetOf<String>()
                         try {
                             val arr = JSONArray(account?.solvedProblemsJson ?: "[]")

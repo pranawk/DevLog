@@ -14,5 +14,6 @@ data class PlatformAccount(
     val totalSolved: Int = 0,
     val totalProblems: Int = 0,
     val streak: Int = 0,
+    val topicStatsJson: String = "{}", // Map of "Topic" to Int (count)
     val lastUpdated: Long = System.currentTimeMillis()
 )

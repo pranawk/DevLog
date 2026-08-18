@@ -10,7 +10,7 @@ object PracticeProblemProvider {
 
     private var cachedCfProblems: List<PracticeProblem>? = null
     private var cachedLcProblems: List<PracticeProblem>? = null
-    
+
     private val allTopics = listOf("Math", "DP", "Greedy", "Graphs", "Strings", "Implementation", "Data Structures", "Number Theory", "DFS/BFS", "Sorting")
 
     fun getProblems(context: Context, platform: String): List<PracticeProblem> {

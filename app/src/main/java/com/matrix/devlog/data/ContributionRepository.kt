@@ -37,7 +37,8 @@ class ContributionRepository(
         val map: Map<String, Int>,
         val totalSolved: Int = 0,
         val totalProblems: Int = 0,
-        val solvedProblemIds: Set<String> = emptySet()
+        val solvedProblemIds: Set<String> = emptySet(),
+        val topicStats: Map<String, Int> = emptyMap()
     )
 
     suspend fun getAccount(id: String): PlatformAccount? = withContext(Dispatchers.IO) {
@@ -104,6 +105,11 @@ class ContributionRepository(
             val solvedProblemsArray = JSONArray()
             fetchedResult.solvedProblemIds.forEach { solvedProblemsArray.put(it) }
 
+            val topicStatsJson = JSONObject()
+            fetchedResult.topicStats.forEach { (topic, count) ->
+                topicStatsJson.put(topic, count)
+            }
+
             val updatedAccount = account.copy(
                 cachedDataJson = json.toString(),
                 solvedProblemsJson = solvedProblemsArray.toString(),
@@ -111,6 +117,7 @@ class ContributionRepository(
                 totalSolved = fetchedResult.totalSolved,
                 totalProblems = if (fetchedResult.totalProblems > 0) fetchedResult.totalProblems else account.totalProblems,
                 streak = streak,
+                topicStatsJson = topicStatsJson.toString(),
                 lastUpdated = System.currentTimeMillis()
             )
             dao.insertAccount(updatedAccount)
@@ -216,55 +223,17 @@ class ContributionRepository(
     }
 
     private fun fetchLeetcode(username: String): FetchResult? {
-        // 1. Get stats to find totalSolved
-        val statsUrl = "https://alfa-leetcode-api.onrender.com/$username/solved"
-        val statsRequest = Request.Builder().url(statsUrl).header("User-Agent", "Mozilla/5.0").build()
-        val totalSolved = try {
-            client.newCall(statsRequest).execute().use { response ->
-                if (response.isSuccessful) {
-                    val json = JSONObject(response.body?.string() ?: "{}")
-                    json.optInt("solvedProblem", 0)
-                } else 0
-            }
-        } catch (e: Exception) { 0 }
-
-        // 2. Fetch all accepted submissions using the limit
-        val solvedProblemIds = mutableSetOf<String>()
-        if (totalSolved > 0) {
-            val acUrl = "https://alfa-leetcode-api.onrender.com/$username/acSubmission?limit=$totalSolved"
-            Log.d("ContributionRepo", "Fetching LC AC submissions with limit $totalSolved: $acUrl")
-            val acRequest = Request.Builder().url(acUrl).header("User-Agent", "Mozilla/5.0").build()
-            try {
-                client.newCall(acRequest).execute().use { response ->
-                    if (response.isSuccessful) {
-                        val bodyStr = response.body?.string() ?: "{}"
-                        val submissions: JSONArray? = when {
-                            bodyStr.trim().startsWith("[") -> JSONArray(bodyStr)
-                            else -> {
-                                val json = JSONObject(bodyStr)
-                                json.optJSONArray("submission") ?: json.optJSONArray("acSubmission") ?: json.optJSONArray("recentAcSubmissionList")
-                            }
-                        }
-
-                        if (submissions != null) {
-                            for (i in 0 until submissions.length()) {
-                                val sub = submissions.optJSONObject(i) ?: continue
-                                val titleSlug = sub.optString("titleSlug") ?: sub.optString("title_slug")
-                                if (titleSlug.isNotEmpty()) solvedProblemIds.add(titleSlug)
-                            }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e("ContributionRepo", "Error fetching LC AC submissions", e)
-            }
-        }
-
-        // 3. Fetch calendar for heatmap (GraphQL)
+        // Fetch only calendar for heatmap and basic stats
         val query = """
             query userProfileCalendar(${'$'}username: String!) {
               matchedUser(username: ${'$'}username) {
                 userCalendar { submissionCalendar }
+                submitStats { acSubmissionNum { difficulty count } }
+                tagProblemCounts {
+                  advanced { tagName problemsSolved }
+                  intermediate { tagName problemsSolved }
+                  fundamental { tagName problemsSolved }
+                }
               }
               allQuestionsCount { difficulty count }
             }
@@ -288,11 +257,35 @@ class ContributionRepository(
                 val data = json.optJSONObject("data") ?: return null
                 val matchedUser = data.optJSONObject("matchedUser") ?: return null
                 
+                var totalSolved = 0
+                matchedUser.optJSONObject("submitStats")?.optJSONArray("acSubmissionNum")?.let { arr ->
+                    for (i in 0 until arr.length()) {
+                        val item = arr.optJSONObject(i)
+                        if (item?.optString("difficulty") == "All") totalSolved = item.optInt("count", 0)
+                    }
+                }
+
                 var totalProblems = 0
                 data.optJSONArray("allQuestionsCount")?.let { arr ->
                     for (i in 0 until arr.length()) {
                         val item = arr.optJSONObject(i)
                         if (item?.optString("difficulty") == "All") totalProblems = item.optInt("count", 0)
+                    }
+                }
+
+                val topicStats = mutableMapOf<String, Int>()
+                matchedUser.optJSONObject("tagProblemCounts")?.let { tags ->
+                    listOf("advanced", "intermediate", "fundamental").forEach { level ->
+                        tags.optJSONArray(level)?.let { arr ->
+                            for (i in 0 until arr.length()) {
+                                val item = arr.optJSONObject(i)
+                                val name = item.optString("tagName")
+                                val count = item.optInt("problemsSolved", 0)
+                                if (count > 0) {
+                                    topicStats[name] = (topicStats[name] ?: 0) + count
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -306,11 +299,10 @@ class ContributionRepository(
                     val ts = tsStr.toLongOrNull() ?: continue
                     if (ts >= cutoff) map[dateFormat.format(Date(ts * 1000))] = calendarJson.optInt(tsStr, 0)
                 }
-                Log.d("ContributionRepo", "LeetCode fetch complete: totalSolved=$totalSolved, solvedProblemIds=${solvedProblemIds.size}")
-                return FetchResult(map, totalSolved, totalProblems, solvedProblemIds = solvedProblemIds)
+                return FetchResult(map, totalSolved, totalProblems, solvedProblemIds = emptySet(), topicStats = topicStats)
             }
         } catch (e: Exception) {
-            Log.e("ContributionRepo", "Error fetching LC GraphQL data", e)
+            Log.e("ContributionRepo", "Error fetching LC data", e)
             return null
         }
     }
@@ -325,6 +317,7 @@ class ContributionRepository(
             val result = json.optJSONArray("result") ?: return null
             val map = mutableMapOf<String, Int>()
             val solvedProblemIds = mutableSetOf<String>()
+            val topicStats = mutableMapOf<String, Int>()
             val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
             val cutoff = (System.currentTimeMillis() / 1000) - (185L * 24 * 60 * 60)
             for (i in 0 until result.length()) {
@@ -334,7 +327,17 @@ class ContributionRepository(
                     val contestId = problem?.optInt("contestId")
                     val index = problem?.optString("index")
                     if (contestId != null && index != null) {
-                        solvedProblemIds.add("$contestId$index")
+                        val problemId = "$contestId$index"
+                        if (!solvedProblemIds.contains(problemId)) {
+                            solvedProblemIds.add(problemId)
+                            // Update topic stats for new solved problems
+                            problem.optJSONArray("tags")?.let { tags ->
+                                for (j in 0 until tags.length()) {
+                                    val tag = tags.optString(j)
+                                    topicStats[tag] = (topicStats[tag] ?: 0) + 1
+                                }
+                            }
+                        }
                     }
                     val creationTime = item.optLong("creationTimeSeconds", 0)
                     if (creationTime >= cutoff) {
@@ -343,7 +346,7 @@ class ContributionRepository(
                     }
                 }
             }
-            return FetchResult(map, totalSolved = solvedProblemIds.size, totalProblems = 9500, solvedProblemIds = solvedProblemIds)
+            return FetchResult(map, totalSolved = solvedProblemIds.size, totalProblems = 9500, solvedProblemIds = solvedProblemIds, topicStats = topicStats)
         }
     }
 
