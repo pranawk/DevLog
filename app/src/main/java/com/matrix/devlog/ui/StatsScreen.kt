@@ -1,10 +1,13 @@
 package com.matrix.devlog.ui
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,17 +33,33 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.matrix.devlog.data.PlatformAccount
+import com.matrix.devlog.practice.PracticeProblem
+import com.matrix.devlog.practice.PracticeProblemProvider
 import kotlinx.coroutines.launch
+import org.json.JSONArray
 import org.json.JSONObject
+import androidx.compose.ui.text.style.TextOverflow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(viewModel: ContributionViewModel) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
     
     val platformOptions = remember(accounts) {
         val list = mutableListOf("all" to "Cumulative")
-        accounts.filter { JSONObject(it.topicStatsJson).length() > 0 }.forEach {
+        
+        // Fix order: Cumulative -> Codeforces -> LeetCode -> Others
+        val sortedAccounts = accounts.filter { JSONObject(it.topicStatsJson).length() > 0 }
+            .sortedWith(compareBy { 
+                when(it.id) {
+                    "codeforces" -> 1
+                    "leetcode" -> 2
+                    else -> 3
+                }
+            })
+
+        sortedAccounts.forEach {
             val name = when(it.id) {
                 "github" -> "GitHub"
                 "leetcode" -> "LeetCode"
@@ -71,11 +90,18 @@ fun StatsScreen(viewModel: ContributionViewModel) {
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
             if (platformOptions.size > 1) {
-                SecondaryScrollableTabRow(
+                TabRow(
                     selectedTabIndex = pagerState.currentPage,
-                    edgePadding = 16.dp,
                     containerColor = Color.Transparent,
-                    divider = {}
+                    divider = {},
+                    indicator = { tabPositions ->
+                        if (pagerState.currentPage < tabPositions.size) {
+                            TabRowDefaults.SecondaryIndicator(
+                                Modifier.tabIndicatorOffset(tabPositions[pagerState.currentPage]),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 ) {
                     platformOptions.forEachIndexed { index, (_, name) ->
                         Tab(
@@ -85,7 +111,14 @@ fun StatsScreen(viewModel: ContributionViewModel) {
                                     pagerState.animateScrollToPage(index)
                                 }
                             },
-                            text = { Text(name, fontSize = 13.sp) }
+                            text = { 
+                                Text(
+                                    text = name, 
+                                    fontSize = 13.sp,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                ) 
+                            }
                         )
                     }
                 }
@@ -216,6 +249,81 @@ fun StatsScreen(viewModel: ContributionViewModel) {
                         }
 
                         item {
+                            val recommendations = remember(selectedPlatformId, accounts) {
+                                val solvedIds = mutableSetOf<String>()
+                                accounts.forEach { account ->
+                                    try {
+                                        val arr = JSONArray(account.solvedProblemsJson ?: "[]")
+                                        for (i in 0 until arr.length()) {
+                                            solvedIds.add(arr.getString(i))
+                                        }
+                                    } catch (e: Exception) {}
+                                }
+
+                                if (selectedPlatformId == "all") {
+                                    // Blended recommendations: ~70% Codeforces, ~30% LeetCode
+                                    val cfRecs = PracticeProblemProvider.getRecommendations(
+                                        context, "Codeforces", 1500, solvedIds
+                                    ).shuffled().take(7)
+                                    val lcRecs = PracticeProblemProvider.getRecommendations(
+                                        context, "LeetCode", 1500, solvedIds
+                                    ).shuffled().take(3)
+
+                                    (cfRecs + lcRecs).shuffled()
+                                } else {
+                                    val account = accounts.find { it.id == selectedPlatformId }
+                                    val totalSolved = account?.totalSolved ?: 0
+                                    val userRating = when (selectedPlatformId) {
+                                        "codeforces" -> {
+                                            if (totalSolved < 50) 800
+                                            else if (totalSolved < 150) 1200
+                                            else if (totalSolved < 400) 1500
+                                            else if (totalSolved < 800) 1800
+                                            else 2200
+                                        }
+                                        "leetcode" -> {
+                                            if (totalSolved < 50) 1000
+                                            else if (totalSolved < 200) 1500
+                                            else if (totalSolved < 500) 2000
+                                            else 2500
+                                        }
+                                        else -> 1000
+                                    }
+
+                                    PracticeProblemProvider.getRecommendations(
+                                        context,
+                                        selectedPlatformId.replaceFirstChar { it.uppercase() },
+                                        userRating,
+                                        solvedIds
+                                    )
+                                }
+                            }
+
+                            if (recommendations.isNotEmpty()) {
+                                Column(modifier = Modifier.padding(vertical = 16.dp)) {
+                                    Text(
+                                        text = "Recommended for You",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
+                                        modifier = Modifier.padding(bottom = 8.dp)
+                                    )
+
+                                    androidx.compose.foundation.lazy.LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        items(recommendations) { problem ->
+                                            RecommendationCard(problem) {
+                                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(problem.link))
+                                                context.startActivity(intent)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        item {
                             Text(
                                 text = "Detailed Breakdown",
                                 fontWeight = FontWeight.Bold,
@@ -223,7 +331,7 @@ fun StatsScreen(viewModel: ContributionViewModel) {
                                 modifier = Modifier.padding(top = 8.dp, bottom = 4.dp)
                             )
                         }
-
+                        
                         item {
                             // Height adjusted to 225dp for 3.5 topics peek
                             Surface(
@@ -250,6 +358,61 @@ fun StatsScreen(viewModel: ContributionViewModel) {
                         item {
                             Spacer(modifier = Modifier.height(100.dp))
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RecommendationCard(
+    problem: PracticeProblem,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .width(200.dp)
+            .height(100.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = problem.name,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+            Text(
+                text = "${problem.platform} • ${problem.difficulty}",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                problem.topics.take(2).forEach { topic ->
+                    Surface(
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.1f),
+                        modifier = Modifier.height(20.dp)
+                    ) {
+                        Text(
+                            text = topic,
+                            fontSize = 9.sp,
+                            modifier = Modifier
+                                .padding(horizontal = 8.dp, vertical = 0.dp)
+                                .wrapContentHeight(Alignment.CenterVertically),
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     }
                 }
             }

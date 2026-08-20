@@ -2,6 +2,7 @@ package com.matrix.devlog.practice
 
 import android.content.Context
 import android.util.Log
+import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.Jsoup
 import java.util.Random
@@ -21,6 +22,65 @@ object PracticeProblemProvider {
         }
     }
 
+    fun getRecommendations(context: Context, platform: String, userRating: Int, solvedIds: Set<String>): List<PracticeProblem> {
+        val allProblems = mutableListOf<PracticeProblem>()
+        try {
+            val inputStream = context.assets.open("problems/recommendation_data.json")
+            val jsonStr = inputStream.bufferedReader().use { it.readText() }
+            val array = JSONArray(jsonStr)
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val pPlatform = obj.getString("platform")
+                if (pPlatform.lowercase() != platform.lowercase()) continue
+                
+                val tagsArray = obj.getJSONArray("tags")
+                val tags = mutableListOf<String>()
+                for (j in 0 until tagsArray.length()) {
+                    tags.add(tagsArray.getString(j))
+                }
+                
+                allProblems.add(PracticeProblem(
+                    id = obj.getString("id"),
+                    name = obj.getString("name"),
+                    link = obj.getString("link"),
+                    platform = pPlatform,
+                    difficulty = obj.getString("difficulty"),
+                    rating = obj.getInt("rating"),
+                    topics = tags
+                ))
+            }
+        } catch (e: Exception) {
+            Log.e("PracticeProblemProvider", "Error loading recommendation data", e)
+            return emptyList()
+        }
+
+        if (allProblems.isEmpty()) return emptyList()
+        
+        val engine = RecommendationEngine(context)
+        
+        val scoredProblems = allProblems.map { problem ->
+            val score = engine.getRecommendationScore(platform, problem.difficulty, problem.topics, userRating)
+            
+            // Score based on model prediction vs problem rating
+            val maxRating = 3500f
+            val predictedRating = score * maxRating
+            val diff = Math.abs(problem.rating - predictedRating)
+            val finalScore = 1.0f / (1.0f + diff)
+            
+            Pair(problem, finalScore)
+        }
+        
+        engine.close()
+        
+        return scoredProblems
+            .filter { !solvedIds.contains(it.first.id) }
+            .sortedByDescending { it.second }
+            .take(20)
+            .shuffled()
+            .take(5)
+            .map { it.first }
+    }
+
     private fun getCfProblems(context: Context): List<PracticeProblem> {
         if (cachedCfProblems != null) return cachedCfProblems!!
         
@@ -36,13 +96,14 @@ object PracticeProblemProvider {
                 val inputStream = assetManager.open("problems/codeforces/$fileName")
                 val html = inputStream.bufferedReader().use { it.readText() }
                 val doc = Jsoup.parse(html)
-                val rows = doc.select("table").last()?.select("tr") ?: continue
                 
                 val difficultyLabel = when (fileName) {
                     "lt_1300.html" -> "< 1300"
                     "gt_2200.html" -> "2200+"
                     else -> fileName.replace(".html", "").replace("_", "-")
                 }
+                
+                val rows = doc.select("table").last()?.select("tr") ?: continue
                 
                 val ratingValue = extractCfRating(fileName)
                 
