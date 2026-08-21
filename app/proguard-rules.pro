@@ -1,41 +1,45 @@
 # Add project specific ProGuard rules here.
 # You can control the set of applied configuration files using the
 # proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
 
-# Keep data models used for Room and potential JSON serialization
+# R8 Full Mode is enabled in gradle.properties (android.enableR8.fullMode=true)
+
+# Data models used for Room and JSON serialization
 -keep class com.matrix.devlog.data.** { *; }
+-keep class com.matrix.devlog.practice.PracticeProblem { *; }
+
+# Room
+-keep class androidx.room.RoomDatabase
+-keep class * extends androidx.room.RoomDatabase
+
+# TensorFlow Lite
+-keep class org.tensorflow.lite.** { *; }
+-keepattributes *Annotation*
+
+# Moshi - Keep JsonAdapter logic
+-keepclassmembers class * {
+    @com.squareup.moshi.Json *;
+}
+
+# Retrofit - Standard attributes for reflection
+-keepattributes Signature, InnerClasses, EnclosingMethod, RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
+-keepclasseswithmembers class * {
+    @retrofit2.http.* <methods>;
+}
 
 # Optimization settings
 -optimizationpasses 5
 -allowaccessmodification
 -mergeinterfacesaggressively
 
-# Remove Log calls in optimized builds
+# Remove Log calls in optimized builds (debug, verbose, info, warn)
 -assumenosideeffects class android.util.Log {
     public static *** d(...);
     public static *** v(...);
     public static *** i(...);
     public static *** w(...);
-    public static *** e(...);
 }
 
-# Moshi and Retrofit rules are typically included in their AARs,
-# but keeping models is a safe measure.
-
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
-
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
-
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Preserve line number information for debugging stack traces
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
