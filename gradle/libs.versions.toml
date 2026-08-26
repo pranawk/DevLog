@@ -9,7 +9,7 @@ lifecycleViewmodelCompose = "2.11.0"
 lifecycleRuntimeCompose = "2.11.0"
 activityCompose = "1.13.0"
 kotlin = "2.4.10"
-composeBom = "2026.06.01"
+composeBom = "2026.08.00"
 googleDevtoolsKsp = "2.3.5"
 navigationCompose = "2.9.8"
 roomRuntime = "2.8.4"
@@ -29,21 +29,22 @@ cameraCamera2 = "1.6.1"
 cameraLifecycle = "1.6.1"
 cameraView = "1.6.1"
 cameraCore = "1.6.1"
-loggingInterceptor = "5.4.0"
-okhttp = "5.4.0"
+loggingInterceptor = "5.5.0"
+okhttp = "5.5.0"
 moshiKotlin = "1.15.2"
 moshiKotlinCodegen = "1.15.2"
 datastorePreferences = "1.2.1"
 robolectric = "4.16.1"
-roborazzi = "1.68.0"
-firebaseBom = "34.16.0"
+roborazzi = "1.72.0"
+firebaseBom = "34.18.0"
 secretsGradlePlugin = "2.0.1"
 googleServices = "4.5.0"
 credentials = "1.6.0"
 googleid = "1.2.0"
 workRuntimeKtx = "2.11.2"
-fragment = "1.8.5"
-jsoup = "1.18.1"
+fragment = "1.9.0"
+jsoup = "1.23.1"
+tensorflowLite = "2.17.0"
 
 
 [libraries]
@@ -103,6 +104,7 @@ googleid = { group = "com.google.android.libraries.identity.googleid", name = "g
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntimeKtx" }
 androidx-fragment-ktx = { group = "androidx.fragment", name = "fragment-ktx", version.ref = "fragment" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
+tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tensorflowLite" }
 
 
 [plugins]
